@@ -2,6 +2,10 @@ import requests
 from utils.ParseExcel import ParseExcel
 from config.public_data import *
 from action.get_rely import GetRelyValue
+from utils.HttpClient import *
+from action.data_store import RelyDataStore
+from action.check_result import CheckResult
+from action.write_result import write_result
 
 def main():
     # 实现从获取接口测试数据到发送情况，再到获取返回结果，并处理结果
@@ -43,9 +47,30 @@ def main():
                     # 下一步，在发送接口请求之前，需要处理数据依赖
                     if relyData:
                         # 需要进行数据依赖处理
-                        relydatas = GetRelyValue.get()
+                        RequestData = GetRelyValue.get(requests,relyData)
+                        print(RequestData)
                     else:
                         print("第%s个API的第%s条不需要做数据依赖处理！" %((idx -1), (c_idx -1)))
+                    if requestData[0] == "{" and requestData[-1] == "}":
+                        # 说明请求参数是一个json串格式数据
+                        requestData = eval(requestData)
+
+                    # 处理完接口请求参数的依赖数据后，接下来就是发送请求并获取响应结果
+                    response = HttpClient.request(requestUrl, requestMethod, paramsType, requestData)
+                    print(response.status_code)
+                    print(response.json())
+                    # 下一步，根据接口响应结果，做数据依赖存储以及结果检测
+                    if response.status_code == "200":
+                        # 获取接口响应body
+                        responseBody = response.json()
+                        # 接下来做数据依赖存储
+                        if dataStore:
+                            RelyDataStore.do(apiName, c_idx-1, requestData, responseBody, eval(dataStore))
+                    # 接下来进行接口响应结果检测
+                    if checkPoint:
+                        errorKey = CheckResult.check(response.json(), eval(checkPoint))
+                        # 将测试结果写回excel
+                        write_result(parseE, caseSheetObj, response.json(), errorKey, c_idx)
                 else:
                     print("第%s个API的第%s条case被忽略执行！" %((idx-1),(c_idx-1)))
         else:
